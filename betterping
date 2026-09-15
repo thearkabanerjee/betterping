@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+
+import subprocess
+import re
+import sys
+import time
+import shutil
+import signal
+from statistics import median
+
+
+# configuration                         ║
+
+
+GRAPH_HEIGHT = 18
+
+# Number of ping results kept in memory.
+# The graph will show as many as fit in the terminal.
+MAX_HISTORY = 200
+
+# How often to ping (seconds)
+PING_INTERVAL = 1.0
+
+
+
+# colors
+RESET = "\033[0m"
+
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+
+CYAN = "\033[96m"
+WHITE = "\033[97m"
+GRAY = "\033[90m"
+
+BLOCK = "█"
+
+
+# state
+
+latencies = []
+
+running = True
+
+
+# control +C handler
+
+def stop_program(signal_number, frame):
+    global running
+    running = False
+
+
+signal.signal(signal.SIGINT, stop_program)
+
+
+# ping
+
+def ping(host):
+
+    try:
+
+        # macOS ping
+        result = subprocess.run(
+            [
+                "ping",
+                "-c", "1",
+                "-n",
+                host
+            ],
+
+            capture_output=True,
+            text=True,
+
+            # Don't wait forever for a response
+            timeout=3
+        )
+
+        output = result.stdout
+
+        # reference macOS output:
+        #
+        # 64 bytes from 142.250.x.x:
+        # icmp_seq=0 ttl=116 time=18.234 ms
+
+        match = re.search(
+            r"time[=<]([\d.]+)\s*ms",
+            output
+        )
+
+        if match:
+
+            return float(match.group(1))
+
+        return None
+
+    except subprocess.TimeoutExpired:
+
+        return None
+
+    except Exception:
+
+        return None
+
+
+
+# color calculation
+
+def get_color(value, median_value):
+
+    if value is None:
+
+        return RED
+
+    # Below median
+    if value < median_value:
+
+        return RED
+
+    # Exactly median
+    elif value == median_value:
+
+        return YELLOW
+
+    # Above median
+    else:
+
+        return GREEN
+
+
+
+# clear terminal
+def clear_screen():
+
+    # Clear screen + move cursor to top-left
+    print(
+        "\033[2J\033[H",
+        end=""
+    )
+
+
+# printing graph
+def draw_graph(host):
+
+    clear_screen()
+
+    terminal = shutil.get_terminal_size()
+
+    terminal_width = terminal.columns
+
+    terminal_height = terminal.lines
+
+
+    # Graph dimensions
+
+    # Space reserved for:
+    #
+    # Y-axis labels
+    # borders
+    # statistics
+    # etc.
+
+    graph_width = max(
+        20,
+        terminal_width - 10
+    )
+
+    # Never exceed our history limit
+    graph_width = min(
+        graph_width,
+        MAX_HISTORY
+    )
+
+
+    # Get the pings currently visible
+    values = latencies[-graph_width:]
+
+
+    # Valid ping results
+    valid_values = [
+        value
+        for value in values
+        if value is not None
+    ]
+
+
+    # medians
+    if valid_values:
+
+        median_value = median(valid_values)
+
+    else:
+
+        median_value = 0
+
+
+    # graph scale
+
+    if valid_values:
+
+        maximum = max(valid_values)
+
+        # Minimum graph scale = 100ms
+        scale = max(
+            100,
+            maximum
+        )
+
+        # Make scale cleaner
+        if scale <= 100:
+
+            scale = 100
+
+        elif scale <= 200:
+
+            scale = 200
+
+        elif scale <= 500:
+
+            scale = 500
+
+        else:
+
+            scale = (
+                (int(scale) // 100) + 1
+            ) * 100
+
+    else:
+
+        scale = 100
+
+# header
+
+    width = min(
+        terminal_width - 2,
+        100
+    )
+
+    print(
+        f"{CYAN}┌"
+        f"{'─' * width}"
+        f"┐"
+        f"{RESET}"
+    )
+
+    print(
+        f"{CYAN}│{RESET} "
+        f"{WHITE}BETTERPING{RESET}"
+        f"    "
+        f"{GRAY}{host}{RESET}"
+    )
+
+    print(
+        f"{CYAN}├"
+        f"{'─' * width}"
+        f"┤"
+        f"{RESET}"
+    )
+
+
+    #graph
+
+    for row in range(
+        GRAPH_HEIGHT,
+        0,
+        -1
+    ):
+
+        threshold = (
+            scale
+            * row
+            / GRAPH_HEIGHT
+        )
+
+
+        # Y-axis label
+
+        label = (
+            f"{int(threshold):>4}ms │"
+        )
+
+
+        line = ""
+
+
+        # draw each ping
+
+        for value in values:
+
+            if value is None:
+
+                line += " "
+
+                continue
+
+
+            bar_height = (
+                value
+                / scale
+                * GRAPH_HEIGHT
+            )
+
+
+            if bar_height >= row:
+
+                line += (
+                    get_color(
+                        value,
+                        median_value
+                    )
+                    + BLOCK
+                    + RESET
+                )
+
+            else:
+
+                line += " "
+
+
+        print(
+            f"{GRAY}{label}{RESET}"
+            f"{line}"
+        )
+
+
+
+    # x axis
+
+    print(
+        f"{GRAY}"
+        f"     0ms └"
+        f"{'─' * len(values)}"
+        f"{RESET}"
+    )
+
+
+    # stats
+
+    valid = [
+        value
+        for value in latencies
+        if value is not None
+    ]
+
+
+    print()
+
+
+    if valid:
+
+        current = valid[-1]
+
+        average = (
+            sum(valid)
+            / len(valid)
+        )
+
+        minimum = min(valid)
+
+        maximum = max(valid)
+
+
+        lost = (
+            len(latencies)
+            - len(valid)
+        )
+
+
+        packet_loss = (
+            lost
+            / len(latencies)
+            * 100
+        )
+
+
+
+        # Current
+
+        print(
+            f"  Current   "
+            f"{get_color(current, median_value)}"
+            f"{current:.1f} ms"
+            f"{RESET}"
+        )
+
+
+        # Average
+
+        print(
+            f"  Average   "
+            f"{CYAN}"
+            f"{average:.1f} ms"
+            f"{RESET}"
+        )
+
+
+        # Median
+
+        print(
+            f"  Median    "
+            f"{YELLOW}"
+            f"{median_value:.1f} ms"
+            f"{RESET}"
+        )
+
+
+
+        # Minimum
+
+        print(
+            f"  Minimum   "
+            f"{GREEN}"
+            f"{minimum:.1f} ms"
+            f"{RESET}"
+        )
+
+
+
+        # Maximum
+
+        print(
+            f"  Maximum   "
+            f"{RED}"
+            f"{maximum:.1f} ms"
+            f"{RESET}"
+        )
+
+
+        # Packet loss
+
+
+        loss_color = (
+            RED
+            if packet_loss > 0
+            else GREEN
+        )
+
+
+        print(
+            f"  Loss      "
+            f"{loss_color}"
+            f"{packet_loss:.1f}%"
+            f"{RESET}"
+        )
+
+
+    else:
+
+        print(
+            f"  {RED}"
+            f"Waiting for ping response..."
+            f"{RESET}"
+        )
+
+
+    print()
+
+    print(
+        f"{GRAY}"
+        f"Ctrl+C to exit"
+        f"{RESET}"
+    )
+
+
+
+# main
+
+def main():
+
+    if len(sys.argv) < 2:
+
+        print(
+            "Usage: betterping <host>"
+        )
+
+        print()
+
+        print(
+            "Examples:"
+        )
+
+        print(
+            "  betterping google.com"
+        )
+
+        print(
+            "  betterping 8.8.8.8"
+        )
+
+        sys.exit(1)
+
+
+    host = sys.argv[1]
+
+
+    # main loop
+
+    while running:
+
+        # Perform ping
+
+        latency = ping(host)
+
+
+        # Store result
+
+        latencies.append(latency)
+
+
+        # Prevent unlimited memory usage
+
+        if len(latencies) > MAX_HISTORY:
+
+            latencies.pop(0)
+
+
+        # Draw UI
+
+        draw_graph(host)
+
+
+        # Wait before next ping
+
+        time.sleep(
+            PING_INTERVAL
+        )
+
+
+   # exit
+
+    clear_screen()
+
+    print(
+        f"{CYAN}"
+        f"betterping stopped."
+        f"{RESET}"
+    )
+
+
+
+if __name__ == "__main__":
+
+    main()

@@ -28,8 +28,6 @@ But since you mentioned earlier that you want it to work like a **real terminal 
 ```markdown
 ## Installation
 
-### Install
-
 Clone the repository and add `betterping` to your system:
 
 ```bash

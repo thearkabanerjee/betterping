@@ -22,6 +22,22 @@ So I made `betterping`.
 
 ## Installation
 
-- git clone https://github.com/thearkabanerjee/betterping.git
-- chmod +x betterping
-- ./betterping <url>
+
+But since you mentioned earlier that you want it to work like a **real terminal command**, I'd actually recommend making the README installation look like this:
+
+```markdown
+## Installation
+
+### Install
+
+Clone the repository and add `betterping` to your system:
+
+```bash
+git clone https://github.com/thearkabanerjee/betterping.git
+cd betterping
+
+chmod +x betterping
+./betterping <url>
+
+# to add it to your global path
+sudo mv betterping /usr/local/bin/betterping

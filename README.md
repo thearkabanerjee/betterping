@@ -20,10 +20,6 @@ I wanted something that would let me glance at the terminal and immediately see:
 
 So I made `betterping`.
 
-## Installation
-
-
-But since you mentioned earlier that you want it to work like a **real terminal command**, I'd actually recommend making the README installation look like this:
 
 ```markdown
 ## Installation

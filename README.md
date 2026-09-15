@@ -22,6 +22,6 @@ So I made `betterping`.
 
 ## Installation
 
-git clone https://github.com/thearkabanerjee/betterping.git
-chmod +x betterping
-./betterping <url>
+- git clone https://github.com/thearkabanerjee/betterping.git
+- chmod +x betterping
+- ./betterping <url>

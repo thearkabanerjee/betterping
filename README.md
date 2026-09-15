@@ -20,9 +20,9 @@ I wanted something that would let me glance at the terminal and immediately see:
 
 So I made `betterping`.
 
+## Installation
 
 ```markdown
-## Installation
 
 Clone the repository and add `betterping` to your system:
 
